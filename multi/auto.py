@@ -10,11 +10,13 @@ from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 
+active_proxies = []
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
     random_user_agent = user_agent.random
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
-    logger.info(device_id)
+    logger.info(f"Using proxy: {socks5_proxy}, device_id: {device_id}")
+    active_proxies.append(socks5_proxy)
     while True:
         try:
             await asyncio.sleep(random.randint(1, 10) / 10)
@@ -24,7 +26,7 @@ async def connect_to_wss(socks5_proxy, user_id):
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            urilist = ["wss://proxy2.wynd.network:4444/","wss://proxy2.wynd.network:4650/"]
+            urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
             uri = random.choice(urilist)
             server_hostname = "proxy2.wynd.network"
             proxy = Proxy.from_url(socks5_proxy)
@@ -84,34 +86,28 @@ async def connect_to_wss(socks5_proxy, user_id):
 
             print(f"Proxy '{proxy_to_remove}' has been removed from the file.")
 
+def remove_proxy(proxy):
+    # Remove the proxy from the list of active proxies
+    if proxy in active_proxies:
+        active_proxies.remove(proxy)
+        logger.info(f"Proxy {proxy} removed from active proxies.")
+
 async def main():
-    # Load user IDs from 'userid_list.txt'
-    try:
-        with open('userid_list.txt', 'r') as file:
-            user_ids = file.read().splitlines()
+    # Load user IDs from the 'userid_list.txt' file
+    with open('userid_list.txt', 'r') as file:
+        user_ids = file.read().splitlines()
         
-        # Fetch proxies from ProxyScrape API
-        r = requests.get("https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text", stream=True)
-        if r.status_code == 200:
-            with open('auto_proxies.txt', 'wb') as f:
-                for chunk in r:
-                    f.write(chunk)
-            with open('auto_proxies.txt', 'r') as file:
-                auto_proxy_list = file.read().splitlines()
+    #put the proxy in a file in the format socks5://username:password@ip:port or socks5://ip:port
+    r = requests.get("https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text", stream=True)
+    if r.status_code == 200:
+       with open('auto_proxies.txt', 'wb') as f:
+           for chunk in r:
+               f.write(chunk)
+       with open('auto_proxies.txt', 'r') as file:
+               auto_proxy_list = file.read().splitlines()
 
-        # Create tasks for each combination of user ID and proxy
-        tasks = []
-        for user_id in user_ids:
-            for proxy in auto_proxy_list:
-                tasks.append(asyncio.ensure_future(connect_to_wss(proxy, user_id)))
-
-        # Run all tasks concurrently
-        await asyncio.gather(*tasks)
-
-    except FileNotFoundError:
-        logger.error("File 'userid_list.txt' not found. Please create it and add user IDs.")
-    except Exception as e:
-        logger.error(f"Error loading user IDs: {e}")
+    tasks = [asyncio.ensure_future(connect_to_wss(i, user_ids)) for i in auto_proxy_list]
+    await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
     #letsgo
