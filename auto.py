@@ -85,8 +85,9 @@ async def connect_to_wss(socks5_proxy, user_id):
             print(f"Proxy '{proxy_to_remove}' has been removed from the file.")
 
 async def main():
-    #find user_id on the site in conlose localStorage.getItem('userId') (if you can't get it, write allow pasting)
-    _user_id = input('Please Enter your user ID: ')
+    # Load user IDs from 'userid_list.txt'
+    with open('user_id.txt', 'r') as file:
+        user_ids = file.read().splitlines()
     #put the proxy in a file in the format socks5://username:password@ip:port or socks5://ip:port
     r = requests.get("https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt", stream=True)
     if r.status_code == 200:
@@ -96,7 +97,7 @@ async def main():
        with open('auto_proxies.txt', 'r') as file:
                auto_proxy_list = file.read().splitlines()
 
-    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in auto_proxy_list]
+    tasks = [asyncio.ensure_future(connect_to_wss(i, user_ids)) for i in auto_proxy_list]
     await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
